@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>共有シフトカレンダー - Clean Edition</title>
+  
+  <!-- M PLUS Rounded 1c フォント -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap" rel="stylesheet">
+
+  <!-- Firebase (リアルタイム同期用) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    /* -------------------------------------------------------------
+       1. 基本スタイル (淡いブルー・寒色系 & M PLUS 統一)
+       ------------------------------------------------------------- */
+    :root {
+      --primary: #3b82f6;            
+      --primary-dark: #1d4ed8;       
+      --primary-light: #e0f2fe;      
+      --primary-border: #93c5fd;     
+      
+      --bg-gradient: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 50%, #93c5fd 100%);
+      --card-bg: rgba(240, 249, 255, 0.95);
+      --card-shadow: 0 20px 30px -10px rgba(56, 189, 248, 0.35);
+      
+      --text-main: #0f172a;          
+      --text-muted: #475569;         
+      
+      --day-shift: linear-gradient(135deg, #60a5fa, #2563eb);   
+      --night-shift: linear-gradient(135deg, #6366f1, #4338ca); 
+      --off-shift: linear-gradient(135deg, #94a3b8, #475569);   
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'M PLUS Rounded 1c', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background: var(--bg-gradient);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 12px;
+      user-select: none;
+    }
+
+    .app-card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.9);
+      border-radius: 28px;
+      padding: 20px;
+      box-shadow: var(--card-shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* -------------------------------------------------------------
+       2. ヘッダー & 部屋設定ステータス
+       ------------------------------------------------------------- */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--primary-border);
+    }
+
+    .title-area h1 {
+      font-size: 1.15rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #1e3a8a, #0284c7);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .room-badge {
+      font-size: 0.65rem;
+      color: #0284c7;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .sync-dot {
+      width: 8px;
+      height: 8px;
+      background: #10b981;
+      border-radius: 50%;
+      display: inline-block;
+      box-shadow: 0 0 6px #10b981;
+    }
+
+    .btn-room-set {
+      background: #ffffff;
+      color: var(--primary-dark);
+      border: 1.5px solid var(--primary-border);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(147, 197, 253, 0.4);
+      transition: all 0.1s ease;
+    }
+
+    .btn-room-set:active {
+      transform: scale(0.95);
+      background: var(--primary-light);
+    }
+
+    .month-picker {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .month-picker h2 {
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: #1e3a8a;
+      letter-spacing: -0.02em;
+    }
+
+    .btn-nav {
+      width: 36px;
+      height: 36px;
+      border-radius: 12px;
+      border: 1.5px solid var(--primary-border);
+      background: #ffffff;
+      color: #1e3a8a;
+      font-size: 0.9rem;
+      font-weight: bold;
+      cursor: pointer;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+      transition: all 0.1s ease;
+    }
+
+    .btn-nav:active {
+      transform: scale(0.9);
+      background: var(--primary-light);
+    }
+
+    /* -------------------------------------------------------------
+       3. カレンダー全体 (淡いブルー & 土日カラー分岐)
+       ------------------------------------------------------------- */
+    .weekdays {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      text-align: center;
+      font-size: 0.75rem;
+      font-weight: 800;
+      color: #1e3a8a;
+      padding: 4px 0;
+    }
+    .weekday.sun { color: #e11d48; }
+    .weekday.sat { color: #0284c7; }
+
+    .calendar-container {
+      background: rgba(224, 242, 254, 0.75);
+      border: 1.5px solid var(--primary-border);
+      border-radius: 20px;
+      padding: 6px;
+      box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.8), 0 4px 12px rgba(186, 230, 253, 0.4);
+    }
+
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 5px;
+    }
+
+    /* 日付マス共通 */
+    .day-cell {
+      min-height: 58px;
+      background: #f0f9ff;
+      border: 1px solid #bae6fd;
+      border-radius: 14px;
+      padding: 4px 2px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      cursor: pointer;
+      box-shadow: 0 2px 4px rgba(186, 230, 253, 0.3);
+      transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+
+    /* 日曜日のマス (うっすらピンク) */
+    .day-cell.sun-cell {
+      background: #ffe4e6;
+      border-color: #fecdd3;
+    }
+    .day-cell.sun-cell .day-num {
+      color: #e11d48 !important; /* 日曜日の文字色 */
+    }
+
+    /* 土曜日のマス (うっすらサックスブルー) */
+    .day-cell.sat-cell {
+      background: #dbeafe;
+      border-color: #bfdbfe;
+    }
+    .day-cell.sat-cell .day-num {
+      color: #0284c7 !important; /* 土曜日の文字色 */
+    }
+
+    .day-cell:active {
+      transform: scale(0.95);
+      opacity: 0.9;
+    }
+
+    /* 日付の数字を確実にくっきり表示 */
+    .day-cell .day-num {
+      font-size: 0.8rem;
+      font-weight: 800;
+      color: #0f172a;
+      display: block;
+      line-height: 1;
+      margin-bottom: 2px;
+    }
+
+    /* 選択された日の枠線強調 */
+    .day-cell.selected {
+      background: #ffffff !important;
+      border: 2.5px solid #2563eb !important;
+      box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+    }
+
+    .day-cell.selected .day-num {
+      color: #2563eb !important;
+    }
+
+    /* シフトバッジ */
+    .badge-container {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-top: 2px;
+    }
+
+    .shift-badge {
+      font-size: 0.55rem;
+      color: #ffffff;
+      font-weight: 800;
+      padding: 2px 3px;
+      border-radius: 6px;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .shift-badge.partner {
+      border: 1px solid rgba(15, 23, 42, 0.35);
+      opacity: 0.9;
+    }
+
+    /* -------------------------------------------------------------
+       4. 操作エリア（ワンタップ＆手動入力）
+       ------------------------------------------------------------- */
+    .action-section {
+      border-top: 1.5px solid var(--primary-border);
+      padding-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .action-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .action-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    .action-date {
+      color: #2563eb;
+      font-weight: 800;
+    }
+
+    .btn-group {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .btn-shift {
+      border: none;
+      color: white;
+      font-weight: 800;
+      font-size: 0.85rem;
+      padding: 10px 0;
+      border-radius: 14px;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);
+      transition: all 0.1s ease;
+    }
+
+    .btn-shift:active {
+      transform: scale(0.95);
+      opacity: 0.9;
+    }
+
+    .btn-day { background: var(--day-shift); }
+    .btn-night { background: var(--night-shift); }
+    .btn-off { background: var(--off-shift); }
+
+    .manual-input-box {
+      display: flex;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 6px;
+      border-radius: 16px;
+      border: 1.5px solid var(--primary-border);
+    }
+
+    .manual-input-box input[type="text"] {
+      flex-grow: 1;
+      border: none;
+      outline: none;
+      background: transparent;
+      padding: 0 8px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #1e293b;
+    }
+
+    .manual-input-box input[type="color"] {
+      -webkit-appearance: none;
+      border: none;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      cursor: pointer;
+      background: transparent;
+    }
+
+    .manual-input-box input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+    .manual-input-box input[type="color"]::-webkit-color-swatch {
+      border: 1px solid rgba(0, 0, 0, 0.15);
+      border-radius: 8px;
+    }
+
+    .btn-add-manual {
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      color: white;
+      border: none;
+      padding: 0 14px;
+      border-radius: 10px;
+      font-size: 0.75rem;
+      font-weight: 800;
+      cursor: pointer;
+      transition: all 0.1s ease;
+    }
+
+    .btn-add-manual:active { transform: scale(0.95); }
+
+    /* -------------------------------------------------------------
+       5. イベントリスト（当日予定）
+       ------------------------------------------------------------- */
+    .events-section {
+      border-top: 1.5px solid var(--primary-border);
+      padding-top: 10px;
+      flex-grow: 1;
+    }
+
+    .events-title {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .event-card {
+      background: #ffffff;
+      border: 1px solid var(--primary-border);
+      border-radius: 16px;
+      padding: 8px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+      box-shadow: 0 2px 6px rgba(186, 230, 253, 0.3);
+    }
+
+    .event-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .event-color-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .event-text {
+      font-size: 0.8rem;
+      font-weight: 800;
+      color: #1e293b;
+    }
+
+    .event-owner {
+      font-size: 0.65rem;
+      color: #64748b;
+      font-weight: normal;
+    }
+
+    .btn-delete {
+      background: #fff1f2;
+      color: #e11d48;
+      border: 1px solid #fecdd3;
+      padding: 4px 10px;
+      border-radius: 10px;
+      font-size: 0.7rem;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .lock-tag {
+      font-size: 0.65rem;
+      color: #64748b;
+      background: #f8fafc;
+      padding: 3px 8px;
+      border-radius: 8px;
+      font-weight: 600;
+      border: 1px solid #e2e8f0;
+    }
+
+    /* -------------------------------------------------------------
+       6. 部屋設定モーダル
+       ------------------------------------------------------------- */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.35);
+      backdrop-filter: blur(8px);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 16px;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-card {
+      background: #ffffff;
+      border-radius: 24px;
+      padding: 24px;
+      width: 100%;
+      max-width: 360px;
+      box-shadow: 0 20px 40px rgba(186, 230, 253, 0.6);
+      border: 1.5px solid var(--primary-border);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .modal-card h3 {
+      font-size: 1rem;
+      font-weight: 800;
+      color: #1e3a8a;
+    }
+
+    .modal-card p {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .modal-card input[type="text"] {
+      width: 100%;
+      border: 1.5px solid var(--primary-border);
+      border-radius: 12px;
+      padding: 10px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      outline: none;
+      background: #f8fafc;
+    }
+
+    .modal-btn {
+      width: 100%;
+      padding: 12px;
+      border-radius: 14px;
+      border: none;
+      font-weight: 800;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.1s ease;
+    }
+
+    .modal-btn:active { transform: scale(0.95); }
+    .modal-btn-primary { background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; }
+    .modal-btn-close { background: #f1f5f9; color: #64748b; }
+  </style>
+</head>
+<body>
+
+  <div class="app-card">
+    <!-- ヘッダー -->
+    <header class="header">
+      <div class="title-area">
+        <h1>共有シフト</h1>
+        <div class="room-badge">
+          <span class="sync-dot"></span>
+          <span id="roomStatusStr">合言葉: 未設定</span>
+        </div>
+      </div>
+      <button onclick="toggleRoomModal()" class="btn-room-set">
+        部屋設定
+      </button>
+    </header>
+
+    <!-- 月選択 -->
+    <div class="month-picker">
+      <button onclick="changeMonth(-1)" class="btn-nav">&lt;</button>
+      <h2 id="currentMonthStr"></h2>
+      <button onclick="changeMonth(1)" class="btn-nav">&gt;</button>
+    </div>
+
+    <!-- カレンダー（全体背景付き） -->
+    <div class="calendar-container">
+      <div class="weekdays">
+        <div class="weekday sun">日</div>
+        <div class="weekday">月</div>
+        <div class="weekday">火</div>
+        <div class="weekday">水</div>
+        <div class="weekday">木</div>
+        <div class="weekday">金</div>
+        <div class="weekday sat">土</div>
+      </div>
+      <div id="calendarGrid" class="calendar-grid"></div>
+    </div>
+
+    <!-- ワンタップ＆手動操作エリア -->
+    <div class="action-section">
+      <div class="action-header">
+        <span class="action-title">選択中の日: <span id="selectedDateStr" class="action-date">未選択</span></span>
+      </div>
+      
+      <!-- 定番ワンタップボタン -->
+      <div class="btn-group">
+        <button onclick="addMyShift('日勤', '#2563eb')" class="btn-shift btn-day">日勤</button>
+        <button onclick="addMyShift('夜勤', '#4338ca')" class="btn-shift btn-night">夜勤</button>
+        <button onclick="addMyShift('休み', '#475569')" class="btn-shift btn-off">休み</button>
+      </div>
+
+      <!-- 自由手動入力フォーム -->
+      <div class="manual-input-box">
+        <input type="text" id="manualTitleInput" placeholder="自由入力（例: 10:00 美容院）">
+        <input type="color" id="manualColorInput" value="#0284c7" title="色を選択">
+        <button onclick="addManualShift()" class="btn-add-manual">追加</button>
+      </div>
+    </div>
+
+    <!-- 予定リスト -->
+    <div class="events-section">
+      <div class="events-title">この日の予定</div>
+      <div id="dayEventsList"></div>
+    </div>
+  </div>
+
+  <!-- 部屋設定モーダル -->
+  <div id="roomModal" class="modal-overlay">
+    <div class="modal-card">
+      <h3>2人で自動共有（合言葉）</h3>
+      <p>パートナーと同じ「合言葉（例: my-pair-2026）」を入力してください。入力した瞬間にリアルタイムで相互同期されます。</p>
+      
+      <input type="text" id="roomIdInput" placeholder="例: happy-pair-123">
+      <button onclick="saveRoomId()" class="modal-btn modal-btn-primary">この合言葉で接続する</button>
+      <button onclick="toggleRoomModal()" class="modal-btn modal-btn-close">閉じる</button>
+    </div>
+  </div>
+
+  <script>
+    // Firebase 設定
+    if (!firebase.apps.length) {
+      firebase.initializeApp({
+        apiKey: "AIzaSyAs-DemoForPairAppPublic0001",
+        projectId: "pair-shift-public-app"
+      });
+    }
+    const db = firebase.firestore();
+
+    let myId = localStorage.getItem('my_user_id');
+    if (!myId) {
+      myId = 'u_' + Math.random().toString(36).substring(2, 9);
+      localStorage.setItem('my_user_id', myId);
+    }
+
+    let currentRoomId = localStorage.getItem('my_room_id') || '';
+    let currentDate = new Date();
+    let selectedDateKey = formatDateKey(new Date());
+    let eventsData = {};
+    let unsubscribeListener = null;
+
+    function formatDateKey(d) {
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    window.onload = () => {
+      updateRoomUI();
+      renderCalendar();
+      if (currentRoomId) {
+        startRealtimeSync();
+      } else {
+        toggleRoomModal();
+      }
+    };
+
+    function startRealtimeSync() {
+      if (!currentRoomId) return;
+      if (unsubscribeListener) unsubscribeListener();
+
+      unsubscribeListener = db.collection('rooms').doc(currentRoomId).collection('events')
+        .onSnapshot(snapshot => {
+          eventsData = {};
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            data.docId = doc.id;
+            if (!eventsData[data.date]) eventsData[data.date] = [];
+            eventsData[data.date].push(data);
+          });
+          renderCalendar();
+        }, err => {
+          console.error("Sync error:", err);
+        });
+    }
+
+    function renderCalendar() {
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+
+      document.getElementById('currentMonthStr').innerText = `${year}年 ${month + 1}月`;
+      document.getElementById('selectedDateStr').innerText = selectedDateKey;
+
+      const firstDay = new Date(year, month, 1).getDay();
+      const lastDate = new Date(year, month + 1, 0).getDate();
+      const grid = document.getElementById('calendarGrid');
+      grid.innerHTML = '';
+
+      for (let i = 0; i < firstDay; i++) {
+        grid.appendChild(document.createElement('div'));
+      }
+
+      for (let day = 1; day <= lastDate; day++) {
+        const dateObj = new Date(year, month, day);
+        const dateKey = formatDateKey(dateObj);
+        const dayOfWeek = dateObj.getDay(); // 0:日, 6:土
+        
+        const cell = document.createElement('div');
+        const isSelected = dateKey === selectedDateKey;
+
+        // 土日判定クラスの付与
+        let dayClass = 'day-cell';
+        if (dayOfWeek === 0) dayClass += ' sun-cell';
+        if (dayOfWeek === 6) dayClass += ' sat-cell';
+        if (isSelected) dayClass += ' selected';
+
+        cell.className = dayClass;
+        cell.onclick = () => { selectedDateKey = dateKey; renderCalendar(); };
+
+        // 明示的な数字テキストレンダリング
+        cell.innerHTML = `<span class="day-num">${day}</span>`;
+
+        if (eventsData[dateKey] && eventsData[dateKey].length > 0) {
+          const badgeContainer = document.createElement('div');
+          badgeContainer.className = 'badge-container';
+
+          eventsData[dateKey].forEach(ev => {
+            const isMe = ev.createdBy === myId;
+            const badge = document.createElement('div');
+            badge.className = `shift-badge ${isMe ? '' : 'partner'}`;
+            badge.style.background = ev.color;
+            badge.innerText = (isMe ? '' : '👥') + ev.title;
+            badgeContainer.appendChild(badge);
+          });
+          cell.appendChild(badgeContainer);
+        }
+
+        grid.appendChild(cell);
+      }
+      renderDayEventsList();
+    }
+
+    function changeMonth(diff) {
+      currentDate.setMonth(currentDate.getMonth() + diff);
+      renderCalendar();
+    }
+
+    async function addMyShift(title, color) {
+      if (!currentRoomId) return alert('先に「部屋設定」で合言葉を決めてください！');
+      
+      const dayEvents = eventsData[selectedDateKey] || [];
+      const existingMyShift = dayEvents.find(e => e.createdBy === myId && ['日勤', '夜勤', '休み'].includes(e.title));
+
+      const ref = db.collection('rooms').doc(currentRoomId).collection('events');
+
+      if (existingMyShift) {
+        await ref.doc(existingMyShift.docId).update({ title, color });
+      } else {
+        await ref.add({
+          date: selectedDateKey,
+          title: title,
+          color: color,
+          createdBy: myId,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }
+    }
+
+    async function addManualShift() {
+      if (!currentRoomId) return alert('先に「部屋設定」で合言葉を決めてください！');
+      const input = document.getElementById('manualTitleInput');
+      const colorInput = document.getElementById('manualColorInput');
+      const title = input.value.trim();
+
+      if (!title) return alert('予定を入力してください');
+
+      await db.collection('rooms').doc(currentRoomId).collection('events').add({
+        date: selectedDateKey,
+        title: title,
+        color: colorInput.value,
+        createdBy: myId,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      input.value = '';
+    }
+
+    async function deleteEventByDocId(docId, createdBy) {
+      if (createdBy !== myId) {
+        alert('相手が入力したシフトは消せません。');
+        return;
+      }
+      await db.collection('rooms').doc(currentRoomId).collection('events').doc(docId).delete();
+    }
+
+    function renderDayEventsList() {
+      const container = document.getElementById('dayEventsList');
+      container.innerHTML = '';
+      const list = eventsData[selectedDateKey] || [];
+
+      if (list.length === 0) {
+        container.innerHTML = '<p style="color: #64748b; font-size: 0.75rem;">予定はありません</p>';
+        return;
+      }
+
+      list.forEach(ev => {
+        const isMe = ev.createdBy === myId;
+        const item = document.createElement('div');
+        item.className = 'event-card';
+        item.innerHTML = `
+          <div class="event-info">
+            <span class="event-color-dot" style="background-color:${ev.color}"></span>
+            <span class="event-text">${ev.title} <span class="event-owner">(${isMe ? '自分' : '相手'})</span></span>
+          </div>
+          ${isMe 
+            ? `<button onclick="deleteEventByDocId('${ev.docId}', '${ev.createdBy}')" class="btn-delete">削除</button>` 
+            : `<span class="lock-tag">🔒 編集不可</span>`
+          }
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    function toggleRoomModal() {
+      document.getElementById('roomModal').classList.toggle('active');
+      document.getElementById('roomIdInput').value = currentRoomId;
+    }
+
+    function saveRoomId() {
+      const val = document.getElementById('roomIdInput').value.trim();
+      if (!val) return alert('合言葉を入力してください');
+      
+      currentRoomId = val;
+      localStorage.setItem('my_room_id', currentRoomId);
+      updateRoomUI();
+      toggleRoomModal();
+      startRealtimeSync();
+    }
+
+    function updateRoomUI() {
+      const el = document.getElementById('roomStatusStr');
+      el.innerText = currentRoomId ? `合言葉: ${currentRoomId}` : '未設定';
+    }
+  </script>
+</body>
+</html>
