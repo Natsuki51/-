@@ -17,6 +17,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800;900&display=swap" rel="stylesheet">
 
+  <!-- PubNub リアルタイム共有ライブラリ -->
+  <script src="https://cdn.pubnub.com/sdk/javascript/pubnub.7.2.2.min.js"></script>
+
   <style>
     :root {
       --primary: #0284c7;            
@@ -54,9 +57,7 @@
       position: relative;
     }
 
-    /* -------------------------------------------------------------
-       ピクトグラム起動スプラッシュ画面 (1.5秒)
-       ------------------------------------------------------------- */
+    /* 起動スプラッシュ画面 */
     #splashScreen {
       position: fixed;
       inset: 0;
@@ -86,7 +87,6 @@
       100% { transform: scale(1); opacity: 1; }
     }
 
-    /* ピクトグラムアイコン枠 */
     .splash-pictogram {
       width: 88px;
       height: 88px;
@@ -121,9 +121,7 @@
       letter-spacing: 0.05em;
     }
 
-    /* -------------------------------------------------------------
-       メイン アプリカード UI
-       ------------------------------------------------------------- */
+    /* メイン UI */
     .app-card {
       width: 100%;
       max-width: 400px;
@@ -516,11 +514,10 @@
 </head>
 <body>
 
-  <!-- ピクトグラム起動スプラッシュ画面 -->
+  <!-- スプラッシュ画面 -->
   <div id="splashScreen">
     <div class="splash-content">
       <div class="splash-pictogram">
-        <!-- ピクトグラム: カレンダー＆ペア共有アイコン -->
         <svg viewBox="0 0 24 24">
           <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2zm-7 3c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
         </svg>
@@ -613,17 +610,85 @@
       localStorage.setItem('my_user_id', myId);
     }
 
+    // URLハッシュ（#以降）からペアIDを取得（無ければ作成して保存）
     let pairId = window.location.hash.replace('#', '').trim();
     if (!pairId) {
-      pairId = 'pair-' + Math.random().toString(36).substring(2, 10);
+      pairId = localStorage.getItem('my_pair_id');
+      if (!pairId) {
+        pairId = 'pair-' + Math.random().toString(36).substring(2, 10);
+      }
       window.location.hash = pairId;
     }
+    localStorage.setItem('my_pair_id', pairId);
 
     let currentDate = new Date();
     let selectedDateKey = formatDateKey(new Date());
     
     const storageKey = 'shift_store_' + pairId;
     let eventsData = JSON.parse(localStorage.getItem(storageKey) || '{}');
+
+    // PubNubによるオンラインリアルタイム同期
+    let pubnub = new PubNub({
+      publishKey: "pub-c-fe1458d9-3f0e-4ba9-b7b8-6e54286134a4",
+      subscribeKey: "sub-c-ee3ea66a-ffcc-4043-9ce6-1df2d8f99e8d",
+      userId: myId
+    });
+
+    const channelName = "room_shift_" + pairId;
+
+    pubnub.addListener({
+      message: function (event) {
+        const data = event.message;
+        if (data && data.type === 'SYNC_DATA' && data.sender !== myId) {
+          mergeRemoteData(data.payload);
+        } else if (data && data.type === 'REQUEST_SYNC' && data.sender !== myId) {
+          broadcastData();
+        }
+      }
+    });
+
+    pubnub.subscribe({ channels: [channelName] });
+
+    // 接続時に最新データを同期リクエスト
+    setTimeout(() => {
+      pubnub.publish({
+        channel: channelName,
+        message: { type: 'REQUEST_SYNC', sender: myId }
+      });
+    }, 500);
+
+    function broadcastData() {
+      pubnub.publish({
+        channel: channelName,
+        message: {
+          type: 'SYNC_DATA',
+          sender: myId,
+          payload: eventsData
+        }
+      });
+    }
+
+    function mergeRemoteData(remoteEvents) {
+      let updated = false;
+      for (let date in remoteEvents) {
+        if (!eventsData[date]) {
+          eventsData[date] = remoteEvents[date];
+          updated = true;
+        } else {
+          remoteEvents[date].forEach(remoteEv => {
+            const exists = eventsData[date].some(localEv => localEv.id === remoteEv.id);
+            if (!exists) {
+              eventsData[date].push(remoteEv);
+              updated = true;
+            }
+          });
+        }
+      }
+      if (updated) {
+        localStorage.setItem(storageKey, JSON.stringify(eventsData));
+        renderCalendar();
+      }
+    }
 
     function formatDateKey(d) {
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -632,20 +697,7 @@
     function saveLocalStore() {
       localStorage.setItem(storageKey, JSON.stringify(eventsData));
       renderCalendar();
-      syncToBroadcast();
-    }
-
-    const syncChannel = new BroadcastChannel('channel_' + pairId);
-    syncChannel.onmessage = (event) => {
-      if (event.data && event.data.type === 'UPDATE') {
-        eventsData = event.data.payload;
-        localStorage.setItem(storageKey, JSON.stringify(eventsData));
-        renderCalendar();
-      }
-    };
-
-    function syncToBroadcast() {
-      syncChannel.postMessage({ type: 'UPDATE', payload: eventsData });
+      broadcastData();
     }
 
     window.onload = () => {
