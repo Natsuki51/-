@@ -17,9 +17,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800;900&display=swap" rel="stylesheet">
 
-  <!-- Firebase -->
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <!-- PubNub リアルタイム同期ライブラリ -->
+  <script src="https://cdn.pubnub.com/sdk/javascript/pubnub.7.2.2.min.js"></script>
 
   <style>
     :root {
@@ -58,9 +57,7 @@
       position: relative;
     }
 
-    /* -------------------------------------------------------------
-       1.5秒 起動スプラッシュ画面 (GitHub上のbg.jpgをそのまま使用)
-       ------------------------------------------------------------- */
+    /* 1.5秒 起動スプラッシュ画面 */
     #splashScreen {
       position: fixed;
       inset: 0;
@@ -126,9 +123,7 @@
       text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
     }
 
-    /* -------------------------------------------------------------
-       メイン アプリカード UI
-       ------------------------------------------------------------- */
+    /* メイン UI */
     .app-card {
       width: 100%;
       max-width: 400px;
@@ -527,7 +522,7 @@
 </head>
 <body>
 
-  <!-- 1.5秒 起動スプラッシュ画面 -->
+  <!-- スプラッシュ画面 -->
   <div id="splashScreen">
     <div class="splash-content">
       <div class="splash-title">Shift Sync</div>
@@ -603,28 +598,13 @@
   </div>
 
   <script>
-    // 1.5秒（1500ms）でスプラッシュ消去
+    // スプラッシュ制御
     window.addEventListener('DOMContentLoaded', () => {
       setTimeout(() => {
         const splash = document.getElementById('splashScreen');
         splash.classList.add('fade-out');
       }, 1500);
     });
-
-    let db = null;
-    try {
-      if (typeof firebase !== 'undefined') {
-        if (!firebase.apps.length) {
-          firebase.initializeApp({
-            apiKey: "AIzaSyAs-DemoForPairAppPublic0001",
-            projectId: "pair-shift-public-app"
-          });
-        }
-        db = firebase.firestore();
-      }
-    } catch(e) {
-      console.warn("Firebase Init fallback:", e);
-    }
 
     let myId = localStorage.getItem('my_user_id');
     if (!myId) {
@@ -635,9 +615,9 @@
     let currentRoomId = (localStorage.getItem('my_room_id') || '').trim().toLowerCase();
     let currentDate = new Date();
     let selectedDateKey = formatDateKey(new Date());
-    
     let eventsData = JSON.parse(localStorage.getItem('shift_events_store') || '{}');
-    let unsubscribeListener = null;
+    
+    let pubnub = null;
 
     function formatDateKey(d) {
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -652,38 +632,82 @@
       updateRoomUI();
       renderCalendar();
       if (currentRoomId) {
-        startRealtimeSync();
+        initPubNubSync();
       } else {
         setTimeout(toggleRoomModal, 1800);
       }
     };
 
-    function startRealtimeSync() {
-      if (!currentRoomId || !db) return;
-      if (unsubscribeListener) unsubscribeListener();
+    function initPubNubSync() {
+      if (!currentRoomId) return;
 
-      const cleanRoomId = currentRoomId.trim().toLowerCase();
+      if (pubnub) {
+        pubnub.unsubscribeAll();
+      }
 
-      unsubscribeListener = db.collection('shared_rooms').doc(cleanRoomId).collection('events')
-        .onSnapshot(snapshot => {
-          let updated = false;
-          snapshot.forEach(doc => {
-            const data = doc.data();
-            data.docId = doc.id;
-            if (!eventsData[data.date]) eventsData[data.date] = [];
-            
-            const existingIdx = eventsData[data.date].findIndex(e => e.docId === doc.id || (e.id && e.id === data.id));
-            if (existingIdx >= 0) {
-              eventsData[data.date][existingIdx] = data;
-            } else {
-              eventsData[data.date].push(data);
+      pubnub = new PubNub({
+        publishKey: "pub-c-fe1458d9-3f0e-4ba9-b7b8-6e54286134a4",
+        subscribeKey: "sub-c-ee3ea66a-ffcc-4043-9ce6-1df2d8f99e8d",
+        userId: myId
+      });
+
+      const channelName = "room_shift_" + currentRoomId;
+
+      pubnub.addListener({
+        message: function (event) {
+          const data = event.message;
+          if (data && data.type === 'SYNC_DATA') {
+            if (data.sender !== myId) {
+              mergeRemoteData(data.payload);
             }
-            updated = true;
-          });
-          if (updated) saveLocalStore();
-        }, err => {
-          console.warn("Sync warning:", err);
+          } else if (data && data.type === 'REQUEST_SYNC') {
+            if (data.sender !== myId) {
+              broadcastData();
+            }
+          }
+        }
+      });
+
+      pubnub.subscribe({ channels: [channelName] });
+
+      // 参加時に相手にデータをリクエスト
+      setTimeout(() => {
+        pubnub.publish({
+          channel: channelName,
+          message: { type: 'REQUEST_SYNC', sender: myId }
         });
+      }, 500);
+    }
+
+    function broadcastData() {
+      if (!pubnub || !currentRoomId) return;
+      pubnub.publish({
+        channel: "room_shift_" + currentRoomId,
+        message: {
+          type: 'SYNC_DATA',
+          sender: myId,
+          payload: eventsData
+        }
+      });
+    }
+
+    function mergeRemoteData(remoteEvents) {
+      let updated = false;
+      for (let date in remoteEvents) {
+        if (!eventsData[date]) {
+          eventsData[date] = remoteEvents[date];
+          updated = true;
+        } else {
+          remoteEvents[date].forEach(remoteEv => {
+            const exists = eventsData[date].some(localEv => localEv.id === remoteEv.id);
+            if (!exists) {
+              eventsData[date].push(remoteEv);
+              updated = true;
+            }
+          });
+        }
+      }
+      if (updated) saveLocalStore();
     }
 
     function renderCalendar() {
@@ -760,26 +784,13 @@
       };
 
       if (existingMyShiftIdx >= 0) {
-        eventObj.docId = dayEvents[existingMyShiftIdx].docId;
         dayEvents[existingMyShiftIdx] = eventObj;
       } else {
         dayEvents.push(eventObj);
       }
 
       saveLocalStore();
-
-      if (currentRoomId && db) {
-        const cleanRoomId = currentRoomId.trim().toLowerCase();
-        const ref = db.collection('shared_rooms').doc(cleanRoomId).collection('events');
-        if (eventObj.docId) {
-          ref.doc(eventObj.docId).set(eventObj, { merge: true }).catch(() => {});
-        } else {
-          ref.add(eventObj).then(docRef => {
-            eventObj.docId = docRef.id;
-            saveLocalStore();
-          }).catch(() => {});
-        }
-      }
+      broadcastData();
     }
 
     function addManualShift() {
@@ -802,31 +813,20 @@
       eventsData[selectedDateKey].push(eventObj);
       input.value = '';
       saveLocalStore();
-
-      if (currentRoomId && db) {
-        const cleanRoomId = currentRoomId.trim().toLowerCase();
-        db.collection('shared_rooms').doc(cleanRoomId).collection('events').add(eventObj).then(docRef => {
-          eventObj.docId = docRef.id;
-          saveLocalStore();
-        }).catch(() => {});
-      }
+      broadcastData();
     }
 
-    function deleteEventById(id, createdBy, docId) {
+    function deleteEventById(id, createdBy) {
       if (createdBy !== myId) {
         alert('相手が入力したシフトは消せません。');
         return;
       }
       
       if (eventsData[selectedDateKey]) {
-        eventsData[selectedDateKey] = eventsData[selectedDateKey].filter(e => e.id !== id && e.docId !== docId);
+        eventsData[selectedDateKey] = eventsData[selectedDateKey].filter(e => e.id !== id);
         if (eventsData[selectedDateKey].length === 0) delete eventsData[selectedDateKey];
         saveLocalStore();
-      }
-
-      if (currentRoomId && db && docId) {
-        const cleanRoomId = currentRoomId.trim().toLowerCase();
-        db.collection('shared_rooms').doc(cleanRoomId).collection('events').doc(docId).delete().catch(() => {});
+        broadcastData();
       }
     }
 
@@ -850,7 +850,7 @@
             <span class="event-text">${ev.title} <span class="event-owner">(${isMe ? '自分' : '相手'})</span></span>
           </div>
           ${isMe 
-            ? `<button onclick="deleteEventById('${ev.id}', '${ev.createdBy}', '${ev.docId || ''}')" class="btn-delete">削除</button>` 
+            ? `<button onclick="deleteEventById('${ev.id}', '${ev.createdBy}')" class="btn-delete">削除</button>` 
             : `<span class="lock-tag">🔒 編集不可</span>`
           }
         `;
@@ -871,7 +871,7 @@
       localStorage.setItem('my_room_id', currentRoomId);
       updateRoomUI();
       toggleRoomModal();
-      startRealtimeSync();
+      initPubNubSync();
     }
 
     function updateRoomUI() {
