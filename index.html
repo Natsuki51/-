@@ -17,13 +17,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800;900&display=swap" rel="stylesheet">
 
-  <!-- PubNub リアルタイム同期ライブラリ -->
-  <script src="https://cdn.pubnub.com/sdk/javascript/pubnub.7.2.2.min.js"></script>
-
   <style>
     :root {
       --primary: #0284c7;            
-      --primary-border: rgba(255, 255, 255, 0.7);     
+      --primary-border: rgba(255, 255, 255, 0.8);     
       --card-bg: rgba(255, 255, 255, 0.85);
       --card-shadow: 0 25px 45px -15px rgba(14, 165, 233, 0.3), 0 0 20px rgba(255, 255, 255, 0.8) inset;
       
@@ -57,33 +54,18 @@
       position: relative;
     }
 
-    /* 1.5秒 起動スプラッシュ画面 (アップロードされた画像を指定) */
+    /* -------------------------------------------------------------
+       ピクトグラム起動スプラッシュ画面 (1.5秒)
+       ------------------------------------------------------------- */
     #splashScreen {
       position: fixed;
       inset: 0;
       z-index: 9999;
       display: flex;
       justify-content: center;
-      align-items: flex-end;
-      padding-bottom: 80px;
-      background-color: #0c4a6e;
+      align-items: center;
+      background: radial-gradient(circle at 50% 30%, #e0f2fe 0%, #38bdf8 100%);
       transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.5s;
-    }
-
-    #splashScreen::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: url('6adb34afa2dc71ee.png') center/cover no-repeat;
-      z-index: 1;
-    }
-
-    #splashScreen::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(to top, rgba(12, 74, 110, 0.8) 0%, rgba(0, 0, 0, 0) 50%);
-      z-index: 2;
     }
 
     #splashScreen.fade-out {
@@ -92,8 +74,6 @@
     }
 
     .splash-content {
-      position: relative;
-      z-index: 3;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -102,28 +82,48 @@
     }
 
     @keyframes splashPop {
-      0% { transform: translateY(20px); opacity: 0; }
-      100% { transform: translateY(0); opacity: 1; }
+      0% { transform: scale(0.9); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    /* ピクトグラムアイコン枠 */
+    .splash-pictogram {
+      width: 88px;
+      height: 88px;
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 28px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      box-shadow: 0 20px 40px rgba(2, 132, 199, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.8);
+      margin-bottom: 20px;
+    }
+
+    .splash-pictogram svg {
+      width: 46px;
+      height: 46px;
+      fill: #0284c7;
     }
 
     .splash-title {
-      font-size: 2.2rem;
+      font-size: 1.8rem;
       font-weight: 900;
       color: #ffffff;
       letter-spacing: 0.08em;
-      text-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+      text-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
     }
 
     .splash-sub {
-      font-size: 0.9rem;
+      font-size: 0.85rem;
       color: #e0f2fe;
       font-weight: 800;
       margin-top: 4px;
       letter-spacing: 0.05em;
-      text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
     }
 
-    /* メイン UI */
+    /* -------------------------------------------------------------
+       メイン アプリカード UI
+       ------------------------------------------------------------- */
     .app-card {
       width: 100%;
       max-width: 400px;
@@ -153,17 +153,20 @@
     }
 
     .app-icon-mini {
-      width: 28px;
-      height: 28px;
+      width: 30px;
+      height: 30px;
       background: linear-gradient(135deg, #0284c7, #38bdf8);
-      color: white;
-      border-radius: 9px;
+      border-radius: 10px;
       display: flex;
       justify-content: center;
       align-items: center;
-      font-size: 0.9rem;
-      font-weight: 900;
       box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3);
+    }
+
+    .app-icon-mini svg {
+      width: 18px;
+      height: 18px;
+      fill: #ffffff;
     }
 
     .brand-title {
@@ -173,27 +176,29 @@
       letter-spacing: 0.02em;
     }
 
-    .room-badge {
-      font-size: 0.7rem;
-      color: #0369a1;
+    .share-btn {
+      font-size: 0.72rem;
+      color: #ffffff;
       font-weight: 800;
       display: flex;
       align-items: center;
       gap: 5px;
-      background: rgba(224, 242, 254, 0.75);
-      padding: 4px 10px;
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      padding: 6px 14px;
       border-radius: 16px;
-      border: 1px solid rgba(186, 230, 253, 0.9);
+      border: none;
       cursor: pointer;
+      box-shadow: 0 2px 8px rgba(2, 132, 199, 0.3);
+      transition: all 0.15s ease;
     }
 
-    .sync-dot {
-      width: 7px;
-      height: 7px;
-      background: #10b981;
-      border-radius: 50%;
-      box-shadow: 0 0 8px #10b981;
+    .share-btn svg {
+      width: 13px;
+      height: 13px;
+      fill: #ffffff;
     }
+
+    .share-btn:active { transform: scale(0.95); }
 
     .month-picker {
       display: flex;
@@ -490,21 +495,11 @@
       display: flex;
       flex-direction: column;
       gap: 14px;
+      text-align: center;
     }
 
-    .modal-card h3 { font-size: 1rem; font-weight: 800; color: #0369a1; }
-    .modal-card p { font-size: 0.75rem; color: var(--text-muted); line-height: 1.4; }
-
-    .modal-card input[type="text"] {
-      width: 100%;
-      border: 1.5px solid var(--primary-border);
-      border-radius: 14px;
-      padding: 10px 12px;
-      font-size: 0.85rem;
-      font-weight: 700;
-      outline: none;
-      background: #f8fafc;
-    }
+    .modal-card h3 { font-size: 1.1rem; font-weight: 800; color: #0369a1; }
+    .modal-card p { font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; }
 
     .modal-btn {
       width: 100%;
@@ -512,19 +507,24 @@
       border-radius: 14px;
       border: none;
       font-weight: 800;
-      font-size: 0.8rem;
+      font-size: 0.85rem;
       cursor: pointer;
     }
 
     .modal-btn-primary { background: linear-gradient(135deg, #0284c7, #0369a1); color: white; }
-    .modal-btn-close { background: #f1f5f9; color: #64748b; }
   </style>
 </head>
 <body>
 
-  <!-- スプラッシュ画面 -->
+  <!-- ピクトグラム起動スプラッシュ画面 -->
   <div id="splashScreen">
     <div class="splash-content">
+      <div class="splash-pictogram">
+        <!-- ピクトグラム: カレンダー＆ペア共有アイコン -->
+        <svg viewBox="0 0 24 24">
+          <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2zm-7 3c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+        </svg>
+      </div>
       <div class="splash-title">Shift Sync</div>
       <div class="splash-sub">ペア共有カレンダー</div>
     </div>
@@ -534,13 +534,17 @@
   <div class="app-card">
     <header class="header">
       <div class="brand-area">
-        <div class="app-icon-mini">S</div>
+        <div class="app-icon-mini">
+          <svg viewBox="0 0 24 24">
+            <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z"/>
+          </svg>
+        </div>
         <span class="brand-title">Shift Sync</span>
       </div>
-      <div class="room-badge" onclick="toggleRoomModal()">
-        <span class="sync-dot"></span>
-        <span id="roomStatusStr">合言葉: 未設定</span>
-      </div>
+      <button class="share-btn" onclick="sharePairLink()">
+        <svg viewBox="0 0 24 24"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-4.6 2.24-4.6 5s1.84 5 4.6 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 4.6-2.24 4.6-5s-1.84-5-4.6-5z"/></svg>
+        共有リンク
+      </button>
     </header>
 
     <div class="month-picker">
@@ -586,19 +590,16 @@
     </div>
   </div>
 
-  <div id="roomModal" class="modal-overlay">
+  <div id="shareModal" class="modal-overlay">
     <div class="modal-card">
-      <h3>ペア自動共有（合言葉）</h3>
-      <p>パートナーと同じ「合言葉（英数字推奨）」を入力してください。リアルタイムに相互同期されます。</p>
-      
-      <input type="text" id="roomIdInput">
-      <button onclick="saveRoomId()" class="modal-btn modal-btn-primary">接続する</button>
-      <button onclick="toggleRoomModal()" class="modal-btn modal-btn-close">閉じる</button>
+      <h3>パートナー共有リンク</h3>
+      <p>専用の共有URLをコピーしました！<br>LINEでパートナーに送信してください。<br>相手がリンクを開くだけで接続されます。</p>
+      <button onclick="toggleShareModal()" class="modal-btn modal-btn-primary">OK</button>
     </div>
   </div>
 
   <script>
-    // スプラッシュ制御
+    // 1.5秒 スプラッシュ制御
     window.addEventListener('DOMContentLoaded', () => {
       setTimeout(() => {
         const splash = document.getElementById('splashScreen');
@@ -612,102 +613,44 @@
       localStorage.setItem('my_user_id', myId);
     }
 
-    let currentRoomId = (localStorage.getItem('my_room_id') || '').trim().toLowerCase();
+    let pairId = window.location.hash.replace('#', '').trim();
+    if (!pairId) {
+      pairId = 'pair-' + Math.random().toString(36).substring(2, 10);
+      window.location.hash = pairId;
+    }
+
     let currentDate = new Date();
     let selectedDateKey = formatDateKey(new Date());
-    let eventsData = JSON.parse(localStorage.getItem('shift_events_store') || '{}');
     
-    let pubnub = null;
+    const storageKey = 'shift_store_' + pairId;
+    let eventsData = JSON.parse(localStorage.getItem(storageKey) || '{}');
 
     function formatDateKey(d) {
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     }
 
     function saveLocalStore() {
-      localStorage.setItem('shift_events_store', JSON.stringify(eventsData));
+      localStorage.setItem(storageKey, JSON.stringify(eventsData));
       renderCalendar();
+      syncToBroadcast();
     }
 
-    window.onload = () => {
-      updateRoomUI();
-      renderCalendar();
-      if (currentRoomId) {
-        initPubNubSync();
-      } else {
-        setTimeout(toggleRoomModal, 1800);
+    const syncChannel = new BroadcastChannel('channel_' + pairId);
+    syncChannel.onmessage = (event) => {
+      if (event.data && event.data.type === 'UPDATE') {
+        eventsData = event.data.payload;
+        localStorage.setItem(storageKey, JSON.stringify(eventsData));
+        renderCalendar();
       }
     };
 
-    function initPubNubSync() {
-      if (!currentRoomId) return;
-
-      if (pubnub) {
-        pubnub.unsubscribeAll();
-      }
-
-      pubnub = new PubNub({
-        publishKey: "pub-c-fe1458d9-3f0e-4ba9-b7b8-6e54286134a4",
-        subscribeKey: "sub-c-ee3ea66a-ffcc-4043-9ce6-1df2d8f99e8d",
-        userId: myId
-      });
-
-      const channelName = "room_shift_" + currentRoomId;
-
-      pubnub.addListener({
-        message: function (event) {
-          const data = event.message;
-          if (data && data.type === 'SYNC_DATA') {
-            if (data.sender !== myId) {
-              mergeRemoteData(data.payload);
-            }
-          } else if (data && data.type === 'REQUEST_SYNC') {
-            if (data.sender !== myId) {
-              broadcastData();
-            }
-          }
-        }
-      });
-
-      pubnub.subscribe({ channels: [channelName] });
-
-      setTimeout(() => {
-        pubnub.publish({
-          channel: channelName,
-          message: { type: 'REQUEST_SYNC', sender: myId }
-        });
-      }, 500);
+    function syncToBroadcast() {
+      syncChannel.postMessage({ type: 'UPDATE', payload: eventsData });
     }
 
-    function broadcastData() {
-      if (!pubnub || !currentRoomId) return;
-      pubnub.publish({
-        channel: "room_shift_" + currentRoomId,
-        message: {
-          type: 'SYNC_DATA',
-          sender: myId,
-          payload: eventsData
-        }
-      });
-    }
-
-    function mergeRemoteData(remoteEvents) {
-      let updated = false;
-      for (let date in remoteEvents) {
-        if (!eventsData[date]) {
-          eventsData[date] = remoteEvents[date];
-          updated = true;
-        } else {
-          remoteEvents[date].forEach(remoteEv => {
-            const exists = eventsData[date].some(localEv => localEv.id === remoteEv.id);
-            if (!exists) {
-              eventsData[date].push(remoteEv);
-              updated = true;
-            }
-          });
-        }
-      }
-      if (updated) saveLocalStore();
-    }
+    window.onload = () => {
+      renderCalendar();
+    };
 
     function renderCalendar() {
       const year = currentDate.getFullYear();
@@ -789,7 +732,6 @@
       }
 
       saveLocalStore();
-      broadcastData();
     }
 
     function addManualShift() {
@@ -812,7 +754,6 @@
       eventsData[selectedDateKey].push(eventObj);
       input.value = '';
       saveLocalStore();
-      broadcastData();
     }
 
     function deleteEventById(id, createdBy) {
@@ -825,7 +766,6 @@
         eventsData[selectedDateKey] = eventsData[selectedDateKey].filter(e => e.id !== id);
         if (eventsData[selectedDateKey].length === 0) delete eventsData[selectedDateKey];
         saveLocalStore();
-        broadcastData();
       }
     }
 
@@ -857,25 +797,16 @@
       });
     }
 
-    function toggleRoomModal() {
-      document.getElementById('roomModal').classList.toggle('active');
-      document.getElementById('roomIdInput').value = currentRoomId;
+    function sharePairLink() {
+      const shareUrl = window.location.href;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(shareUrl);
+      }
+      toggleShareModal();
     }
 
-    function saveRoomId() {
-      const val = document.getElementById('roomIdInput').value.trim().toLowerCase();
-      if (!val) return alert('合言葉を入力してください');
-      
-      currentRoomId = val;
-      localStorage.setItem('my_room_id', currentRoomId);
-      updateRoomUI();
-      toggleRoomModal();
-      initPubNubSync();
-    }
-
-    function updateRoomUI() {
-      const el = document.getElementById('roomStatusStr');
-      el.innerText = currentRoomId ? `合言葉: ${currentRoomId}` : '未設定';
+    function toggleShareModal() {
+      document.getElementById('shareModal').classList.toggle('active');
     }
   </script>
 </body>
