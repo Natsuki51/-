@@ -57,7 +57,7 @@
       position: relative;
     }
 
-    /* 1.5秒 起動スプラッシュ画面 */
+    /* 1.5秒 起動スプラッシュ画面 (アップロードされた画像を指定) */
     #splashScreen {
       position: fixed;
       inset: 0;
@@ -74,7 +74,7 @@
       content: "";
       position: absolute;
       inset: 0;
-      background: url('bg.jpg') center/cover no-repeat;
+      background: url('6adb34afa2dc71ee.png') center/cover no-repeat;
       z-index: 1;
     }
 
@@ -670,7 +670,6 @@
 
       pubnub.subscribe({ channels: [channelName] });
 
-      // 参加時に相手にデータをリクエスト
       setTimeout(() => {
         pubnub.publish({
           channel: channelName,
