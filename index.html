@@ -30,9 +30,11 @@
       --text-main: #0c4a6e;          
       --text-muted: #475569;         
       
-      --day-shift: linear-gradient(135deg, #38bdf8, #0284c7);   
-      --night-shift: linear-gradient(135deg, #818cf8, #4f46e5); 
-      --off-shift: linear-gradient(135deg, #94a3b8, #475569);   
+      /* 全て青系で統一 */
+      --day-shift: linear-gradient(135deg, #38bdf8, #0284c7);    /* 日勤 */
+      --night-shift: linear-gradient(135deg, #2563eb, #1d4ed8);  /* 夜勤 */
+      --ake-shift: linear-gradient(135deg, #06b6d4, #0284c7);    /* 明け */
+      --off-shift: linear-gradient(135deg, #bae6fd, #93c5fd);    /* 休み: 一番薄い青 */
     }
 
     * {
@@ -57,7 +59,38 @@
       position: relative;
     }
 
-    /* 起動スプラッシュ画面 */
+    /* -------------------------------------------------------------
+       上部トースト通知（リンクコピー時に上からスッと表示）
+       ------------------------------------------------------------- */
+    #toastNotification {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-100px);
+      background: rgba(12, 74, 110, 0.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      color: #ffffff;
+      font-size: 0.8rem;
+      font-weight: 800;
+      padding: 10px 20px;
+      border-radius: 20px;
+      box-shadow: 0 10px 25px rgba(2, 132, 199, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.3);
+      z-index: 10000;
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease;
+      opacity: 0;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #toastNotification.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+
+    /* スプラッシュ画面 */
     #splashScreen {
       position: fixed;
       inset: 0;
@@ -320,7 +353,7 @@
     }
 
     .shift-badge.partner {
-      border: 1px solid rgba(15, 23, 42, 0.3);
+      border: 1px solid rgba(15, 23, 42, 0.2);
       opacity: 0.9;
     }
 
@@ -343,26 +376,31 @@
 
     .btn-group {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
     }
 
     .btn-shift {
       border: none;
       color: white;
       font-weight: 800;
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       padding: 11px 0;
       border-radius: 16px;
       cursor: pointer;
-      box-shadow: 0 4px 12px rgba(14, 165, 233, 0.25);
+      box-shadow: 0 4px 12px rgba(14, 165, 233, 0.22);
       transition: all 0.12s ease;
     }
 
     .btn-shift:active { transform: scale(0.95); opacity: 0.9; }
     .btn-day { background: var(--day-shift); }
     .btn-night { background: var(--night-shift); }
-    .btn-off { background: var(--off-shift); }
+    .btn-ake { background: var(--ake-shift); }
+    .btn-off { 
+      background: var(--off-shift); 
+      color: #0c4a6e;
+      border: 1px solid rgba(186, 230, 253, 0.8);
+    }
 
     .manual-input-box {
       display: flex;
@@ -464,55 +502,15 @@
       border: 1px solid #e2e8f0;
       flex-shrink: 0;
     }
-
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(15, 23, 42, 0.3);
-      backdrop-filter: blur(8px);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      padding: 16px;
-      z-index: 100;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.2s ease;
-    }
-
-    .modal-overlay.active { opacity: 1; pointer-events: auto; }
-
-    .modal-card {
-      background: #ffffff;
-      border-radius: 28px;
-      padding: 24px;
-      width: 100%;
-      max-width: 340px;
-      border: 1.5px solid var(--primary-border);
-      box-shadow: 0 20px 40px rgba(14, 165, 233, 0.2);
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-      text-align: center;
-    }
-
-    .modal-card h3 { font-size: 1.1rem; font-weight: 800; color: #0369a1; }
-    .modal-card p { font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; }
-
-    .modal-btn {
-      width: 100%;
-      padding: 12px;
-      border-radius: 14px;
-      border: none;
-      font-weight: 800;
-      font-size: 0.85rem;
-      cursor: pointer;
-    }
-
-    .modal-btn-primary { background: linear-gradient(135deg, #0284c7, #0369a1); color: white; }
   </style>
 </head>
 <body>
+
+  <!-- 上部トースト通知 -->
+  <div id="toastNotification">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="#38bdf8"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+    <span>共有リンクをコピーしました</span>
+  </div>
 
   <!-- スプラッシュ画面 -->
   <div id="splashScreen">
@@ -570,8 +568,9 @@
       
       <div class="btn-group">
         <button onclick="addMyShift('日勤', '#0284c7')" class="btn-shift btn-day">日勤</button>
-        <button onclick="addMyShift('夜勤', '#4f46e5')" class="btn-shift btn-night">夜勤</button>
-        <button onclick="addMyShift('休み', '#475569')" class="btn-shift btn-off">休み</button>
+        <button onclick="addMyShift('夜勤', '#1d4ed8')" class="btn-shift btn-night">夜勤</button>
+        <button onclick="addMyShift('明け', '#06b6d4')" class="btn-shift btn-ake">明け</button>
+        <button onclick="addMyShift('休み', '#bae6fd')" class="btn-shift btn-off">休み</button>
       </div>
 
       <div class="manual-input-box">
@@ -584,14 +583,6 @@
     <div class="events-section">
       <div class="events-title">この日の予定</div>
       <div id="dayEventsList"></div>
-    </div>
-  </div>
-
-  <div id="shareModal" class="modal-overlay">
-    <div class="modal-card">
-      <h3>パートナー共有リンク</h3>
-      <p>専用の共有URLをコピーしました！<br>LINEでパートナーに送信してください。<br>相手がリンクを開くだけで接続されます。</p>
-      <button onclick="toggleShareModal()" class="modal-btn modal-btn-primary">OK</button>
     </div>
   </div>
 
@@ -610,7 +601,6 @@
       localStorage.setItem('my_user_id', myId);
     }
 
-    // URLハッシュ（#以降）からペアIDを取得（無ければ作成して保存）
     let pairId = window.location.hash.replace('#', '').trim();
     if (!pairId) {
       pairId = localStorage.getItem('my_pair_id');
@@ -627,7 +617,6 @@
     const storageKey = 'shift_store_' + pairId;
     let eventsData = JSON.parse(localStorage.getItem(storageKey) || '{}');
 
-    // PubNubによるオンラインリアルタイム同期
     let pubnub = new PubNub({
       publishKey: "pub-c-fe1458d9-3f0e-4ba9-b7b8-6e54286134a4",
       subscribeKey: "sub-c-ee3ea66a-ffcc-4043-9ce6-1df2d8f99e8d",
@@ -649,7 +638,6 @@
 
     pubnub.subscribe({ channels: [channelName] });
 
-    // 接続時に最新データを同期リクエスト
     setTimeout(() => {
       pubnub.publish({
         channel: channelName,
@@ -747,6 +735,11 @@
             const badge = document.createElement('div');
             badge.className = `shift-badge ${isMe ? '' : 'partner'}`;
             badge.style.background = ev.color;
+            if (ev.color === '#bae6fd' || ev.color === '#93c5fd') {
+              badge.style.color = '#0c4a6e';
+            } else {
+              badge.style.color = '#ffffff';
+            }
             badge.innerText = (isMe ? '' : '👥') + ev.title;
             badgeContainer.appendChild(badge);
           });
@@ -767,7 +760,7 @@
       if (!eventsData[selectedDateKey]) eventsData[selectedDateKey] = [];
       
       const dayEvents = eventsData[selectedDateKey];
-      const existingMyShiftIdx = dayEvents.findIndex(e => e.createdBy === myId && ['日勤', '夜勤', '休み'].includes(e.title));
+      const existingMyShiftIdx = dayEvents.findIndex(e => e.createdBy === myId && ['日勤', '夜勤', '明け', '休み'].includes(e.title));
       
       const eventObj = {
         id: 'ev_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
@@ -849,16 +842,21 @@
       });
     }
 
+    // クリップボードコピー＆上部トースト表示処理
     function sharePairLink() {
       const shareUrl = window.location.href;
       if (navigator.clipboard) {
         navigator.clipboard.writeText(shareUrl);
       }
-      toggleShareModal();
+      showToast();
     }
 
-    function toggleShareModal() {
-      document.getElementById('shareModal').classList.toggle('active');
+    function showToast() {
+      const toast = document.getElementById('toastNotification');
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 2000);
     }
   </script>
 </body>
